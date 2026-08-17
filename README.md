@@ -202,8 +202,8 @@ entity を残さないので、store に在るものを「提出された全部�
 
 ## Deploy（live）
 
-**https://kenbun.04-feasts-minded.workers.dev** — Cloudflare Worker、Durable Object
-1 個を直列化器、D1 を storage に使う。ビルドは `worker/`。
+**https://kenbun.itonami.cloud** （+ `kenbun.04-feasts-minded.workers.dev`）— Cloudflare
+Worker、Durable Object 1 個を直列化器、D1 を storage に使う。ビルドは `worker/`。
 
 ```bash
 cd worker
@@ -266,12 +266,15 @@ DO へ渡す（DO は公開アドレスを持たない）。secret が壊れて�
 **共有 secret 表はこれが持てる最弱の identity である。** 入力 1 つの関数 1 本にして
 あるので、CACAO 検証で置き換えるときに他へ波及しない。
 
-### routes を宣言していない
+### custom domain は「確かめてから」取った
 
-custom domain は**単一所有**で、最後に deploy した側が勝ち、**どちらにも conflict が
-出ない**（`kotobase-protocols-worker` は 2026-07-17 にこれで `git.kotobase.net` を
-失った）。だから v0.1 は workers.dev だけに出し、ホスト名は**副作用ではなく明示的に**
-取りにいく。
+`kenbun.itonami.cloud`（2026-08-17）。custom domain は**単一所有**で、最後に deploy した
+側が勝ち、**どちらにも conflict が出ない**（`kotobase-protocols-worker` は 2026-07-17 に
+これで `git.kotobase.net` を失った）。だから claim の**前に**未使用を確認した——
+DNS レコード無し、workspace 内のどの wrangler config もこの名前を持たない。
+**claim を他の作業の副作用にしない。**
+
+両ホストは**同じ store を見る**（`/report` の `findings-on-file` 一致を実測）。
 
 ### live 実測（2026-08-17）
 
@@ -318,8 +321,6 @@ body が報告者を名乗れるようにすると 3 failure。
 
 ## まだ無いもの
 
-- **custom domain。** live なのは workers.dev だけ。`kenbun.itonami.cloud` は
-  未取得（上記のとおり意図的に、副作用で取らない）。
 - **Worker が datom 面に載っていない（最優先）。** 上記のとおり、これは**能力の
   制約ではなく鍵の所在**である。`kotobase-client` は cljs で Worker で動き、
   hydrate→commit の橋はそのまま使える。止まっているのは
@@ -337,4 +338,8 @@ body が報告者を名乗れるようにすると 3 failure。
   `storage.memory` に対してのみ行った。sqlite / s3 / postgres provider での実測は
   していない——**していないものを「動く」と書かない。**
 - **credit の決済面。** 意図的に無い（上記）。
-- **fleet gate 登録。** 未実施。
+- ~~fleet gate 登録~~ **完了**（2026-08-17）。`gates.edn` に
+  `{:name "kenbun" :org "cloud-itonami" :gate :jvm-test :cd true}`。node `joseph` で
+  緑を確認（`Ran 38 tests containing 129 assertions / 0 failures`、ローカルと同数)。
+  **この gate が覆うのは base + HTTP だけ**——`test-kotobase` は `:kotobase` alias が
+  要るので走らず、worker build も走らない（gates.edn のコメントに明記）。
