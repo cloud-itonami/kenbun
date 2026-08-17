@@ -356,6 +356,10 @@ body が報告者を名乗れるようにすると 3 failure。
   （`{:entities 4 :ceiling 0}`）——一度も発火したことのない上限は、効くかどうか
   誰も知らない上限である。
 - **認証が共有 secret 表。** 持てる最弱の identity。CACAO 検証への差し替えが次。
+  ⚠ 一度「datom 面移行と同じ鍵で解ける」と書いたが**不正確**——
+  **outbound（kenbun→kotobase.net）は艦隊 seed で解けるが、inbound（報告者→kenbun）の
+  CACAO 検証は別問題**。`kotobase.cacao` は `mint-cacao` を持つが **verify を持たない**
+  （cljs で inbound を検証する実装の所在は未確認）。着手前に索引を引くこと。
 - ~~durable provider の実測~~ **完了**（2026-08-17、`kotobase-storage-sqlite`）。
   **実バグを 1 件見つけた**: `append-audit!` の連番が record 内の atom だったので、
   同じ DB を開き直すと **0 から振り直し**、2 個目の session の記録が 1 個目と衝突して
