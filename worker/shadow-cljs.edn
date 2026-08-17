@@ -1,0 +1,22 @@
+;; Deploy shell for cloud-itonami/kenbun (ADR-2608170100).
+;; Library sources come from the west checkouts as shadow source-paths, the
+;; same pattern kotoba-lang/kotobase-protocols-worker uses, relative to
+;; orgs/cloud-itonami/kenbun/worker.
+;; Build: npx shadow-cljs release worker -> out/worker.js (:esm), run through
+;; scripts/resource-guard.mjs in the superproject (repo-wide build governor).
+{:source-paths
+ ["src"
+  "../src"                                  ; kenbun.{finding,evidence,dedupe,triage,credit,intake,http}
+  "../../../kotoba-lang/kotoba-issue/src"]  ; kotoba.issue.{store,gate,run}
+
+ :dependencies []
+
+ :builds
+ {:worker {:target :esm
+           :output-dir "out"
+           ;; Serialize compilation: parallel par-compile aborts under host
+           ;; CPU contention from the concurrent agent builds this machine
+           ;; runs (the same note kotobase-protocols-worker carries).
+           :compiler-options {:parallel-build false}
+           :modules {:worker {:exports {default kenbun.worker/handler
+                                        KenbunStore kenbun.worker/KenbunStore}}}}}}

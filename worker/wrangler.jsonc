@@ -1,0 +1,28 @@
+{
+  // cloud-itonami/kenbun — admission gate for human/agent bug findings.
+  // No `routes` block: this deploys to workers.dev only. Custom domains are
+  // single-owner and the last `wrangler deploy` declaring one wins with no
+  // conflict surfaced to either side (kotoba-lang/kotobase-protocols-worker
+  // lost git.kotobase.net that way on 2026-07-17), so a hostname is claimed
+  // deliberately and separately, never as a side effect of shipping v0.1.
+  "name": "kenbun",
+  "main": "out/worker.js",
+  "compatibility_date": "2025-03-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kenbun",
+      "database_id": "54acbbff-20af-43cb-b7e2-bbd3f25c5fc9"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "KENBUN_STORE", "class_name": "KenbunStore" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_classes": ["KenbunStore"] }
+  ]
+}
