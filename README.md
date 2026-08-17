@@ -320,10 +320,15 @@ body が報告者を名乗れるようにすると 3 failure。
 
 - **custom domain。** live なのは workers.dev だけ。`kenbun.itonami.cloud` は
   未取得（上記のとおり意図的に、副作用で取らない）。
-- **Worker が datom 面に載っていない。** `kotobase.core` は cljs で **Promise を返す**が
-  `IssueStore` は同期 protocol なので、`kenbun.store.kotobase` は **JVM 専用**のまま。
-  Worker を datom 面へ移すには非同期の issue-store 契約が要り、それはここにも上流にも
-  無い。**実在する gap であって見落としではない。**
+- **Worker が datom 面に載っていない（最優先）。** 上記のとおり、これは**能力の
+  制約ではなく鍵の所在**である。`kotobase-client` は cljs で Worker で動き、
+  hydrate→commit の橋はそのまま使える。止まっているのは
+  `itonami-fleet-kotobase-seed` が kagi に無いこと。seed が戻れば次の順で進む:
+  `[:db/add e a v]` が置換か蓄積かを probe → store 実装 → Worker 差し替え →
+  live 検証 → D1 撤去。
+  ⚠ この項目は 2026-08-17 まで「非同期契約が上流に無いので実在する gap」と
+  書いていた。**それは誤りで、同じ README の deploy 節が既に訂正していたのに
+  ここだけ古い論拠が残っていた**——訂正は文書の全箇所に当てる。
 - **hydrate が毎リクエスト全件を読む。** dedupe が「on file のどれかと同じ欠陥か」を
   問うので v0.1 では全件。表が育てば通用しなくなる——隠れた TODO ではなく
   `d1-store` の docstring と ここに書いてある。
