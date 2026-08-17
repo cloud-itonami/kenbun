@@ -232,7 +232,7 @@ storage を DO の中ではなく D1 に置くのは workspace 規則（DO は�
 D1 は**アプリの DB** として使っており、分散を名乗る経路の premise ではない
 （消せば kenbun は履歴を失う。だから kenbun はそういう主張をしない）。
 
-### ⚠ D1 backend は暫定であり、恒久の設計ではない
+### backend は 2 つ。kotobase.net が本命で、D1 は暫定
 
 **本来の backend は kotobase.net**（この workspace の graph BaaS）である。
 `kotoba-lang/kotobase-client` は **ClojureScript** なので **Worker で動き**、
@@ -250,6 +250,20 @@ kotobase.net に載せれば、下の「塞がるもの」は**塞がらない**
 kagi に存在せず（`no such item`、2026-08-17 実測）、投入先は読み戻せない Worker
 secret。**新しい seed は発行しない**——新 seed = 新 DID = 新 graph であり、
 それはオーナーが 2026-07-30 に明示的に退けた分割そのものだから。
+
+### 実測した wire（推測ではなく `npm run inspect` の出力）
+
+| 送った値 | `v_edn` として返る | 判断 |
+|---|---|---|
+| `:finding`（keyword） | `"\":finding\""` | 属性名 `a` は**先頭コロン付きの文字列** |
+| `(js/Date. 0)` を生で | `"Thu Jan 01 1970 ..."` | **読み戻せない**——埋め込みエンジンと同じ |
+| `nil` を生で | `""` | 空文字列と区別不能——同上 |
+
+だから値は**一律 `pr-str` して送り、読むときは 2 回 decode する**
+（`v_edn` は「保存された値の EDN テキスト」で、保存された値はこちらが書いた
+文字列なので層が 2 つある）。1 回しか decode しないと**全 entity が組み立てに
+失敗し、書き込みは正しく着いているのに「保存されない」ように見える**——
+e2e が実際にこれを捕まえた。
 
 ### 現状の D1 backend が塞いでいるもの（暫定の代償）
 
@@ -322,15 +336,15 @@ body が報告者を名乗れるようにすると 3 failure。
 
 ## まだ無いもの
 
-- **Worker が datom 面に載っていない（最優先）。** 上記のとおり、これは**能力の
-  制約ではなく鍵の所在**である。`kotobase-client` は cljs で Worker で動き、
-  hydrate→commit の橋はそのまま使える。止まっているのは
-  `itonami-fleet-kotobase-seed` が kagi に無いこと。seed が戻れば次の順で進む:
-  `[:db/add e a v]` が置換か蓄積かを probe → store 実装 → Worker 差し替え →
-  live 検証 → D1 撤去。
-  ⚠ この項目は 2026-08-17 まで「非同期契約が上流に無いので実在する gap」と
-  書いていた。**それは誤りで、同じ README の deploy 節が既に訂正していたのに
-  ここだけ古い論拠が残っていた**——訂正は文書の全箇所に当てる。
+- **Worker の datom 面 backend は実装・live 検証済み。残るのは seed を挿すことだけ。**
+  `kenbun.worker.kotobase-store` が kotobase.net 上の `IssueStore` で、
+  `KOTOBASE_SECRET_KEY` binding があれば Worker はそちらを使う（無ければ D1）。
+  `/health` の `:kenbun/backend` がどちらで動いているかを申告する。
+  **live 検証済み**: `npm run e2e` が ephemeral identity + 使い捨て database で
+  実 kotobase.net に対して 11 checks 全 PASS（finding の往復・入れ子 evidence・
+  plane 越しの dedupe・status が最新値で読み戻る・audit 永続）。
+  **残っているのは `itonami-fleet-kotobase-seed` を kagi から取って secret に
+  入れることだけ**——コードではなく鍵。
 - **hydrate が毎リクエスト全件を読む（上限は可視化・強制済み）。** dedupe が
   「on file のどれかと同じ欠陥か」を問うので v0.1 では全件。**正しい直し方は
   fingerprint で候補を絞ることで、それは backend が確定してから**（今 D1 側に索引を

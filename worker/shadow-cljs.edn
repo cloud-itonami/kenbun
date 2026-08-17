@@ -7,7 +7,9 @@
 {:source-paths
  ["src"
   "../src"                                  ; kenbun.{finding,evidence,dedupe,triage,credit,intake,http}
-  "../../../kotoba-lang/kotoba-issue/src"]  ; kotoba.issue.{store,gate,run}
+  "../../../kotoba-lang/kotoba-issue/src"   ; kotoba.issue.{store,gate,run}
+  "../../../kotoba-lang/kotobase-client/src"] ; kotobase.{client,cacao,cid} — the
+                                              ; kotobase.net datom-plane client
 
  :dependencies []
 
@@ -19,4 +21,22 @@
            ;; runs (the same note kotobase-protocols-worker carries).
            :compiler-options {:parallel-build false}
            :modules {:worker {:exports {default kenbun.worker/handler
-                                        KenbunStore kenbun.worker/KenbunStore}}}}}}
+                                        KenbunStore kenbun.worker/KenbunStore}}}}
+  ;; A one-off script that asks the REAL kotobase.net what its datom plane
+  ;; does with a repeated attribute. The answer decides whether the store
+  ;; adapter must retract before asserting (the embedded engine accumulates),
+  ;; and it is not a question that can be answered by reading source.
+  :probe {:target :node-script
+          :output-to "out/probe.js"
+          :compiler-options {:parallel-build false}
+          :main kenbun.probe/main}
+  ;; End-to-end check of the kotobase.net store against the live service.
+  ;; Ephemeral identity, throwaway database — see the namespace docstring.
+  :e2e {:target :node-script
+        :output-to "out/e2e.js"
+        :compiler-options {:parallel-build false}
+        :main kenbun.e2e/main}
+  :inspect {:target :node-script
+            :output-to "out/inspect.js"
+            :compiler-options {:parallel-build false}
+            :main kenbun.inspect/main}}}

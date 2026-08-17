@@ -45,7 +45,8 @@
   (:require [clojure.edn :as edn]
             [goog.object :as gobj]
             [kenbun.http :as http]
-            [kenbun.worker.d1-store :as d1]))
+            [kenbun.worker.d1-store :as d1]
+            [kenbun.worker.kotobase-store :as kbs]))
 
 (def principal-header "x-kenbun-principal")
 
@@ -85,12 +86,28 @@
 
 ;; ---------- the Durable Object ----------
 
+(defn backend
+  "Which persistence this deployment is on.
+
+  kotobase.net when an operator seed is configured, D1 otherwise. The choice
+  is made from a binding rather than a flag so that a deployment cannot claim
+  the datom plane while lacking the key to reach it — and the answer is
+  published on /health, because 'which store am I actually on' is not
+  something an operator should have to infer from behaviour.
+
+  D1 is provisional. It exists because an earlier reading wrongly concluded
+  the Worker could not reach the hosted graph BaaS; kenbun's rows belong on
+  the datom plane, where they can be joined with the rest of the fleet."
+  [env]
+  (if (kbs/make-client (binding-of env "KOTOBASE_SECRET_KEY")) :kotobase :d1))
+
 (defn handle-in-object
-  "Runs inside the DO: ensure schema, hydrate, run the pure handler, commit
-  the diff."
+  "Runs inside the DO: hydrate, run the pure handler, commit the diff —
+  against whichever backend is configured."
   [env ^js request]
   (let [url (js/URL. (.-url request))
-        db (binding-of env "DB")]
+        db (binding-of env "DB")
+        kb (kbs/make-client (binding-of env "KOTOBASE_SECRET_KEY"))]
     (-> (.text request)
         (.then
          (fn [body]
@@ -101,12 +118,16 @@
                       :path (.-pathname url)
                       :query-params (query-params url)
                       :body (when-not (= "" body) body)}]
-             (-> (d1/ensure-schema! db)
-                 (.then (fn [_]
-                          (d1/with-store db (d1/ceiling-for env)
-                                         (fn [store]
-                                           (http/handle {:store store :principal principal}
-                                                        req)))))
+             (-> (if kb
+                   (kbs/with-store kb nil
+                     (fn [store] (http/handle {:store store :principal principal} req)))
+                   (-> (d1/ensure-schema! db)
+                       (.then (fn [_]
+                                (d1/with-store db (d1/ceiling-for env)
+                                               (fn [store]
+                                                 (http/handle {:store store
+                                                               :principal principal}
+                                                              req)))))))
                  (.then (fn [pair] (->response (aget pair 0))))))))
         (.catch (fn [e]
                   ;; The message is kept. A generic 500 would make a schema
@@ -136,7 +157,10 @@
   (edn-response 200
                 {:kenbun/service "kenbun"
                  :kenbun/surface "kenbun.http"
-                 :kenbun/store "d1 behind one durable object"
+                 :kenbun/store (case (backend env)
+                                 :kotobase "kotobase.net datom plane, behind one durable object"
+                                 :d1 "d1 (provisional), behind one durable object")
+                 :kenbun/backend (backend env)
                  ;; Whether writes are possible at all is a fact about the
                  ;; deployment, and a service that can accept nobody should
                  ;; say so on its own health endpoint rather than let the

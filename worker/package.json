@@ -3,10 +3,15 @@
   "private": true,
   "scripts": {
     "build": "shadow-cljs release worker",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "probe": "shadow-cljs compile probe && node out/probe.js",
+    "e2e": "shadow-cljs compile e2e && node out/e2e.js"
   },
   "devDependencies": {
     "shadow-cljs": "^2.28.20",
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "@ipld/dag-cbor": "^9.2.0",
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0"
   }
 }
