@@ -37,6 +37,13 @@
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
 
+  ;; A real durable provider. Without it "provider-neutral" is a claim only
+  ;; ever checked against an in-memory store, which cannot fail to survive a
+  ;; restart because there is no restart.
+  :kotobase-sqlite {:extra-deps {io.github.kotoba-lang/kotobase-storage-sqlite
+                                 {:git/url "https://github.com/kotoba-lang/kotobase-storage-sqlite.git"
+                                  :git/sha "d669666daf0cfa67db1b5a973f01720f2ec3fc4b"}}}
+
   ;; -d is repeated explicitly. cognitect.test-runner defaults to the single
   ;; directory "test", so adding test-kotobase to :extra-paths alone puts it
   ;; on the classpath and runs none of it — reporting the base suite's green

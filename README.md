@@ -138,13 +138,14 @@ finding / issue / proposal / review / audit は**全部 1 つの ref に入る**
 修正になったか」が query で辿れなくなる。**代償は kenbun の全書き込みが 1 ref に
 直列化すること**で、これは黙って取らず書いておく規則になっている。
 
-### 素朴に書くと壊れる 3 点（すべて実測。仮定していない）
+### 素朴に書くと壊れる 4 点（すべて実測。仮定していない）
 
 | 面の挙動 | 素朴な adapter だとどうなるか |
 |---|---|
 | `transact!` は**上書きせず蓄積する** | `status` が :proposed→:approved→:merged と動くと 3 つ全部残り、`q` は set なので**任意の 1 つ**が返る。merge 済みの proposal が未レビューとして読める |
 | 値は文字列化され、`Date` は `pr-str` ではなく **`str`** | `"Thu Jan 01 09:00:00 JST 1970"` になり**読み戻せない**。audit の全レコードが Date を持つ |
 | `nil` が `""` になる | 本物の空文字列と区別できない |
+| **連番 counter が開き直しで 0 に戻る** | 2 個目の session が 1 から振り直して 1 個目と衝突し、**audit の順序が壊れる**。memory では原理的に出ない（開き直しが無い）——SQLite に当てた初回で出た |
 
 対策: (1) 書くたびに当該 predicate の既存値を**名指しで retract してから assert**
 （同一 transaction 内。`[:db/retract s p nil]` のワイルドカードは**効かない**ことも実測済み）
@@ -334,9 +335,13 @@ body が報告者を名乗れるようにすると 3 failure。
   問うので v0.1 では全件。表が育てば通用しなくなる——隠れた TODO ではなく
   `d1-store` の docstring と ここに書いてある。
 - **認証が共有 secret 表。** 持てる最弱の identity。CACAO 検証への差し替えが次。
-- **durable provider の実測。** adapter は provider 非依存だが、検証は
-  `storage.memory` に対してのみ行った。sqlite / s3 / postgres provider での実測は
-  していない——**していないものを「動く」と書かない。**
+- ~~durable provider の実測~~ **完了**（2026-08-17、`kotobase-storage-sqlite`）。
+  **実バグを 1 件見つけた**: `append-audit!` の連番が record 内の atom だったので、
+  同じ DB を開き直すと **0 から振り直し**、2 個目の session の記録が 1 個目と衝突して
+  audit の順序が壊れていた。**memory provider では原理的に出ない**（開き直しが無い）。
+  連番は既存の最大値から seed するよう修正。`:kotobase-sqlite` alias で
+  `clojure -M:dev:kotobase:kotobase-sqlite:test:kotobase-test` → 53 tests / 187 assertions。
+  s3 / postgres provider では引き続き測っていない。
 - **credit の決済面。** 意図的に無い（上記）。
 - ~~fleet gate 登録~~ **完了**（2026-08-17）。`gates.edn` に
   `{:name "kenbun" :org "cloud-itonami" :gate :jvm-test :cd true}`。node `joseph` で

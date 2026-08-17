@@ -14,9 +14,10 @@
   writes serialize through one ref, which is the trade this workspace's rule
   says to state rather than take silently.
 
-  ## Three things the plane does that a naive adapter gets wrong
+  ## Four things a naive adapter gets wrong
 
-  Each was measured against `kotobase.storage.memory`, not assumed:
+  The first three were measured against `kotobase.storage.memory`. The fourth
+  could not be — see below — and is the reason the SQLite suite exists:
 
   1. **`transact!` accumulates; it does not replace.** Writing `status`
      twice leaves BOTH triples, and `q` returns a set — so a proposal that
@@ -36,18 +37,34 @@
      becomes. Uniform `pr-str` removes the ambiguity: `nil` encodes to
      \"nil\" and \"\" encodes to \"\\\"\\\"\".
 
+  4. **A per-instance sequence counter restarts when the database is
+     reopened.** `append-audit!` numbers records so `audit-log` can return
+     them in order; seeding that counter at zero was correct against memory
+     and wrong against every durable provider, because a second session
+     renumbered from 1 and collided with the first, interleaving the trail.
+     The counter is now seeded from the highest sequence already stored.
+     **An in-memory provider cannot catch this: it is never reopened, so the
+     bug has nowhere to appear.** It was found the first time the adapter ran
+     against SQLite.
+
   Encoding every value uniformly costs something real: an external Datalog
   query must match the encoded form (`\":critical\"`, not `:critical`). That
   is a visible cost — the query returns nothing — rather than a silent one,
   which is why it is preferred over encoding only some types. `decode` is
   public so external callers can read what kenbun wrote.
 
-  ## Not yet
+  ## JVM only, and what that does and does not mean
 
-  `kotobase.core` on ClojureScript returns Promises, and `IssueStore` is a
-  synchronous protocol. This adapter is therefore JVM-only. A Worker
-  deployment needs an async issue-store contract, which does not exist here
-  or upstream; that is a real gap, not an oversight."
+  `kotobase.core` on ClojureScript returns Promises while `IssueStore` is
+  synchronous, so THIS adapter — which embeds the engine — is JVM-only.
+
+  That is not a reason the Worker cannot reach the datom plane. It reaches
+  kotobase.net, the hosted graph BaaS, through `kotoba-lang/kotobase-client`,
+  which IS ClojureScript; and the hydrate -> synchronous handler -> diff
+  commit bridge already written for the Worker is backend-agnostic. An
+  earlier version of this docstring claimed a Worker needed an async
+  IssueStore contract that did not exist. That was wrong, and is retracted:
+  what actually blocks the move is key custody, not any missing contract."
   (:require [clojure.edn :as edn]
             [kotobase.core :as kb]
             [kotoba.issue.store :as store]))
@@ -126,6 +143,21 @@
                       (concat retracts [[s p (encode v)]]))))
           m)))
 
+(defn- max-stored-seq
+  "The highest audit sequence already in the graph, or 0.
+
+  Read once per store instance to seed the counter. Concurrent writers to the
+  same graph would still race here — two instances could read the same max
+  and both claim the next number. This adapter does NOT solve that, and says
+  so rather than implying it: the Worker deployment puts a single Durable
+  Object in front for exactly this reason, and a JVM caller that wants
+  concurrent writers needs its own serialization."
+  [db]
+  (->> (kb/q db [nil seq-predicate nil])
+       (map (comp decode :o))
+       (filter number?)
+       (reduce max 0)))
+
 (defrecord KotobaseIssueStore [db audit-counter]
   store/IssueStore
   (get-entity [_ kind id]
@@ -157,7 +189,15 @@
     ;; reviewed again with the same verdict). Keying on the id would let the
     ;; second write silently overwrite the first, which is the one thing an
     ;; audit log may not do.
-    (let [n (swap! audit-counter inc)
+    ;;
+    ;; The counter is seeded from what is ALREADY STORED, not from zero. A
+    ;; per-instance counter starting at 1 was correct against an in-memory
+    ;; provider and wrong against every durable one: reopening the database
+    ;; restarted the numbering, so a second session's records collided with
+    ;; the first's and `audit-log` returned them interleaved. That defect was
+    ;; invisible to the memory tests because a memory store is never reopened
+    ;; — it is what the SQLite suite was written to find.
+    (let [n (swap! audit-counter (fn [c] (inc (or c (max-stored-seq db)))))
           s (subject :audit (str n "-" (:kotoba.issue.audit/id audit-map)))]
       (kb/transact! db (into [[s kind-predicate (encode :audit)]
                               [s id-predicate (encode (:kotoba.issue.audit/id audit-map))]
@@ -173,7 +213,9 @@
   s3, postgres) and crypto policy out of here entirely — this namespace never
   names a storage backend."
   [db]
-  (->KotobaseIssueStore db (atom 0)))
+  ;; nil, not 0: the counter is seeded lazily from the graph on first append.
+  ;; Starting at 0 is what made a reopened database restart its numbering.
+  (->KotobaseIssueStore db (atom nil)))
 
 (defn audit-log
   "The audit trail in append order. `mem-store`'s `audit-log` returns
