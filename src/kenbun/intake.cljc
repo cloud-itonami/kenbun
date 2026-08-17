@@ -15,7 +15,8 @@
   `submit!` never throws for a bad submission. A malformed finding is a
   result, not an exception — an intake that crashes on the input it exists to
   screen loses the input."
-  (:require [kenbun.credit :as credit]
+  (:require [clojure.edn :as edn]
+            [kenbun.credit :as credit]
             [kenbun.dedupe :as dedupe]
             [kenbun.evidence :as evidence]
             [kenbun.finding :as finding]
@@ -111,6 +112,44 @@
                             :kenbun.intake/triage t
                             :kenbun.intake/route (gate/route proposal)
                             :kenbun.intake/credit (credit/split f)})))))))
+
+;; ---------- the exit from the review lane ----------
+
+(defn merge-handlers
+  "Handlers for `kotoba.issue.gate/merge!`.
+
+  Realizing a `:kenbun/file-defect` proposal is what 'this really is a
+  defect' means: the finding is marked confirmed and the issue moves from
+  :open to :triaged. Without this, the `:needs-human-review` lane every
+  high/critical finding is routed into has no exit, and the severest findings
+  would be the only ones that never resolve."
+  [s]
+  {:kenbun/file-defect
+   (fn [p]
+     ;; clojure.edn, not clojure.core/read-string: the payload is stored data,
+     ;; and the core reader evaluates reader literals in it. edn exists in
+     ;; both Clojure and ClojureScript, so this stays one branch.
+     (let [payload (:kotoba.issue.proposal/payload-edn p)
+           fid (when payload (:finding-id (edn/read-string payload)))]
+       (when fid
+         (store/put-entity! s :finding fid {:kenbun.finding/confirmed? true}))
+       (store/put-entity! s :issue (:kotoba.issue.proposal/issue p)
+                          {:kotoba.issue/state :triaged})
+       {:confirmed fid}))})
+
+(defn review!
+  "Record a human verdict on a filed finding's proposal, and on :approve
+  realize it.
+
+  `merge!` is scoped to this proposal id. Sweeping every :approved proposal —
+  which is what `gate/merge!` does without opts — would also realize
+  proposals still waiting on someone else's separate decision."
+  [s proposal-id verdict {:keys [decider note]}]
+  (let [p (gate/review! s proposal-id verdict {:decider decider :note note})]
+    (if (= :approve verdict)
+      {:kenbun.intake/proposal p
+       :kenbun.intake/merged (gate/merge! s (merge-handlers s) {:proposal-id proposal-id})}
+      {:kenbun.intake/proposal p})))
 
 (defn intake-report
   "Counts for a batch of submissions, with the same three-way split

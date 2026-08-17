@@ -160,11 +160,51 @@ finding / issue / proposal / review / audit は**全部 1 つの ref に入る**
 **1 つを選ばず throw する**。ここで推測すると、この adapter が防いでいるバグを
 自分で作り直すことになる。
 
+## HTTP 面
+
+`kenbun.http` は **pure な `.cljc` 関数** `(handle ctx req) → resp`。I/O も
+host JSON も transport も持たない——認証・socket・store の注入は deploy shell の
+仕事で、これは `kotobase.protocols.issue` と同じ seam なので、自前の server を
+持たずにその隣に mount できる。wire は **EDN**（`application/edn`）。
+
+```
+POST /findings                 申告する（201 filed / 200 corroborated /
+                                       422 rejected / 409 undecidable）
+GET  /findings                 一覧（?lane= ?confirmed=）
+GET  /findings/{id}
+GET  /issues                   一覧（?state= ?lane=）
+POST /proposals/{id}/reviews   判定を記録する。:approve は確定まで行う
+GET  /report                   いま store に在るものの数
+```
+
+### 報告者は ctx から取る。body からは取らない
+
+**この面が存在する理由がこの 1 行である。** `kenbun.credit` は admitted な
+finding を「名前の付いた報告者への取り分」に変えるので、**body が名乗る報告者 id は
+「submitter が指名した相手に払え」という指示**になる。全 handler は ctx の認証済み
+principal から報告者を作り、`:reporter` を積んだ body は**無視ではなく reject** する
+——黙って落とすとクライアントからは尊重されたのと**見分けがつかない**。
+
+同じ理由で `:reproduced-by` を body から受け取らない（自分で witness を名乗ると
+credit を水増しでき、`:auto-file` lane に自力で入れてしまう）。principal の**認証**は
+shell の仕事だが、**信用するかどうか**はこの ns が決めることではない——principal の
+無い write は全部 401 で、匿名の報告者を発明しない。
+
+### 3 値は wire でも 3 値のまま
+
+`:rejected` は **422**（理解した上で処理しない）、`:undecidable` は **409**
+（server がどちらとも断定するのを拒む）。同じ status に畳まない。
+
+`GET /report` は**submission 総数を報告しない**——reject / undecidable は
+entity を残さないので、store に在るものを「提出された全部」であるかのように
+数えるのは admission gate が拒んでいる collapse そのもの。答えるのは
+`intake/intake-report`（結果の集合が要る）の仕事。
+
 ## テスト
 
 ```bash
-clojure -M:dev:test                            # base（20 tests / 70 assertions）
-clojure -M:dev:kotobase:test:kotobase-test     # + 永続 store（30 tests / 108 assertions）
+clojure -M:dev:test                            # base + HTTP（38 tests / 129 assertions）
+clojure -M:dev:kotobase:test:kotobase-test     # + 永続 store（48 tests / 167 assertions）
 clojure -M:test                                # standalone fork（:git/sha で解決）
 clojure -M:lint                                # 4 つの source root すべて
 ```
@@ -174,8 +214,9 @@ clojure -M:lint                                # 4 つの source root すべて
 同じシナリオを `mem-store` と kotobase の**両方**に流し、adapter が真の代替物で
 あることを確かめる。
 
-landing 前に 2 回壊して確かめた: admission の中心的主張（`:undecidable` が
-`:admitted` に畳まれない）を壊すと 7 failure、retract-then-assert を外すと 4 error。
+landing 前に 3 回壊して確かめた: admission の中心的主張（`:undecidable` が
+`:admitted` に畳まれない）を壊すと 7 failure、retract-then-assert を外すと 4 error、
+body が報告者を名乗れるようにすると 3 failure。
 
 ⚠ **`:kotobase-test` alias は `-d` を明示している。** `cognitect.test-runner` の
 既定は `test` 1 つだけなので、`:extra-paths` に足すだけでは **classpath に載るが
