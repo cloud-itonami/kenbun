@@ -115,22 +115,83 @@ corroboration（第 2 の再現者）も同様に種別を見ない。**agent �
 `submit!` は不正な申告で **throw しない**——選別のために在る入口が入力で落ちたら
 入力を失う。壊れた申告も `:kenbun.intake/outcome` を持つ結果として返る。
 
+## 永続 store（opt-in）
+
+`kenbun.store.kotobase` が kotobase の datom 面に載る `IssueStore` である。
+**`src` ではなく `src-kotobase` に置いてある**——`mem-store` で足りる利用者に
+datom 面を引かせないため。有効化は `:kotobase` alias。
+
+```clojure
+(require '[kenbun.store.kotobase :as kbs]
+         '[kotobase.core :as kb]
+         '[kotobase.storage.memory :as memory])
+
+(def s (kbs/kotobase-store
+        (kb/open {:storage (memory/memory-store)   ; provider は呼び出し側が選ぶ
+                  :encrypt-fn identity :decrypt-fn identity
+                  :blind-fn pr-str :visible? (constantly true)})))
+```
+
+finding / issue / proposal / review / audit は**全部 1 つの ref に入る**。
+`kotobase.core/open` は `:ref-name` を 1 つしか取らないので Datalog の到達範囲は
+ちょうど ref 1 本（ADR-260726）——分けると「どの報告者の finding が merge された
+修正になったか」が query で辿れなくなる。**代償は kenbun の全書き込みが 1 ref に
+直列化すること**で、これは黙って取らず書いておく規則になっている。
+
+### 素朴に書くと壊れる 3 点（すべて実測。仮定していない）
+
+| 面の挙動 | 素朴な adapter だとどうなるか |
+|---|---|
+| `transact!` は**上書きせず蓄積する** | `status` が :proposed→:approved→:merged と動くと 3 つ全部残り、`q` は set なので**任意の 1 つ**が返る。merge 済みの proposal が未レビューとして読める |
+| 値は文字列化され、`Date` は `pr-str` ではなく **`str`** | `"Thu Jan 01 09:00:00 JST 1970"` になり**読み戻せない**。audit の全レコードが Date を持つ |
+| `nil` が `""` になる | 本物の空文字列と区別できない |
+
+対策: (1) 書くたびに当該 predicate の既存値を**名指しで retract してから assert**
+（同一 transaction 内。`[:db/retract s p nil]` のワイルドカードは**効かない**ことも実測済み）
+(2) 値は一律 `pr-str` / `clojure.edn/read-string`（`#inst` が読める）
+(3) 一律なので `nil` は `"nil"`、`""` は `"\"\""` になり衝突しない。
+
+一律エンコードには実費がある——外部の Datalog query は `":critical"` と
+エンコード後の形で当てる必要がある。ただしこれは**見える**代償（query が
+何も返さない）であって、型ごとに使い分けたときの**黙った誤読**ではない。
+`decode` は public にしてある。
+
+なお `entity-from-triples` は、1 predicate に複数値が在った場合に
+**1 つを選ばず throw する**。ここで推測すると、この adapter が防いでいるバグを
+自分で作り直すことになる。
+
 ## テスト
 
 ```bash
-clojure -M:dev:test     # workspace 内（sibling checkout を :local/root で解決）
-clojure -M:test         # standalone fork（:git/sha で kotoba-issue を取る）
+clojure -M:dev:test                            # base（20 tests / 70 assertions）
+clojure -M:dev:kotobase:test:kotobase-test     # + 永続 store（30 tests / 108 assertions）
+clojure -M:test                                # standalone fork（:git/sha で解決）
+clojure -M:lint                                # 4 つの source root すべて
 ```
 
-20 tests / 70 assertions。**すべての検査は両方向を出す**——拒否する入力と
-受理する入力の両方を持つ（`evidence_test.cljc` 冒頭の note を参照）。
-landing 前に、admission の中心的主張（`:undecidable` が `:admitted` に畳まれない）を
-実際に壊して 7 failure を確認し、戻してある。
+**すべての検査は両方向を出す**——拒否する入力と受理する入力の両方を持つ
+（`evidence_test.cljc` 冒頭の note）。`intake-behaves-identically-on-both-stores` は
+同じシナリオを `mem-store` と kotobase の**両方**に流し、adapter が真の代替物で
+あることを確かめる。
+
+landing 前に 2 回壊して確かめた: admission の中心的主張（`:undecidable` が
+`:admitted` に畳まれない）を壊すと 7 failure、retract-then-assert を外すと 4 error。
+
+⚠ **`:kotobase-test` alias は `-d` を明示している。** `cognitect.test-runner` の
+既定は `test` 1 つだけなので、`:extra-paths` に足すだけでは **classpath に載るが
+1 本も走らず**、base suite の green が adapter を覆っているかのように見える。
+`:lint` が 4 つの root を名指ししているのも同じ理由。
 
 ## まだ無いもの
 
-- **appview / HTTP 面。** いまは決定ランタイムだけ。deploy 面を足すときは
-  `kotobase-protocol-issues` の `/issues/*`（`git.kotobase.net`）に載せる。
-- **永続 store adapter。** `store/mem-store` 以外は未実装。契約は 4 関数なので
-  kotobase 側 adapter は薄い。
+- **appview / HTTP 面。** いまは決定ランタイム + store adapter だけ。deploy 面を
+  足すときは `kotobase-protocol-issues` の `/issues/*`（`git.kotobase.net`）に載せる。
+- **Worker（cljs）経路。** `kotobase.core` は ClojureScript では **Promise を返す**が
+  `IssueStore` は同期 protocol なので、この adapter は **JVM 専用**である。
+  Worker deployment には非同期の issue-store 契約が要り、それはここにも上流にも
+  無い。**実在する gap であって見落としではない。**
+- **durable provider の実測。** adapter は provider 非依存だが、検証は
+  `storage.memory` に対してのみ行った。sqlite / s3 / postgres provider での実測は
+  していない——**していないものを「動く」と書かない。**
 - **credit の決済面。** 意図的に無い（上記）。
+- **fleet gate 登録。** 未実施。

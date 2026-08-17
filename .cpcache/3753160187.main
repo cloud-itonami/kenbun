@@ -1,0 +1,6 @@
+-m
+cognitect.test-runner
+-d
+test
+-d
+test-kotobase

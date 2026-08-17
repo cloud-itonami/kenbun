@@ -14,7 +14,22 @@
  :aliases
  {:dev {:override-deps
         {io.github.kotoba-lang/kotoba-issue
-         {:local/root "../../kotoba-lang/kotoba-issue"}}}
+         {:local/root "../../kotoba-lang/kotoba-issue"}
+         io.github.kotoba-lang/kotobase
+         {:local/root "../../kotoba-lang/kotobase"}
+         io.github.kotoba-lang/kotobase-engine
+         {:local/root "../../kotoba-lang/kotobase-engine"}
+         io.github.kotoba-lang/kotobase-storage
+         {:local/root "../../kotoba-lang/kotobase-storage"}}}
+
+  ;; Opt-in durable store. Kept off the default :paths so the base library's
+  ;; dependency surface stays at kotoba-issue alone — a caller happy with
+  ;; store/mem-store should not pull the datom plane. JVM only: kotobase.core
+  ;; returns Promises on ClojureScript and IssueStore is synchronous.
+  :kotobase {:extra-paths ["src-kotobase"]
+             :extra-deps {io.github.kotoba-lang/kotobase
+                          {:git/url "https://github.com/kotoba-lang/kotobase.git"
+                           :git/sha "bb29834f5f95ac88bf447f03cf0d440bcfce6d05"}}}
 
   :test {:extra-paths ["test"]
          :extra-deps {io.github.cognitect-labs/test-runner
@@ -22,6 +37,18 @@
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
 
+  ;; -d is repeated explicitly. cognitect.test-runner defaults to the single
+  ;; directory "test", so adding test-kotobase to :extra-paths alone puts it
+  ;; on the classpath and runs none of it — reporting the base suite's green
+  ;; as if it covered the adapter too.
+  :kotobase-test {:extra-paths ["test-kotobase"]
+                  :main-opts ["-m" "cognitect.test-runner"
+                              "-d" "test" "-d" "test-kotobase"]}
+
+  ;; All four source roots. Naming only "src test" here lints the base
+  ;; library and reports clean while never opening the adapter — the same
+  ;; shape as the test runner defaulting to one directory.
   :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
-         :main-opts ["-m" "clj-kondo.main" "--lint" "src" "test"
+         :main-opts ["-m" "clj-kondo.main" "--lint"
+                     "src" "test" "src-kotobase" "test-kotobase"
                      "--fail-level" "error"]}}}

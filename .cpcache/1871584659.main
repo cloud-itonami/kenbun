@@ -3,5 +3,7 @@ clj-kondo.main
 --lint
 src
 test
+src-kotobase
+test-kotobase
 --fail-level
 error
