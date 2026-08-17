@@ -231,12 +231,30 @@ storage を DO の中ではなく D1 に置くのは workspace 規則（DO は�
 D1 は**アプリの DB** として使っており、分散を名乗る経路の premise ではない
 （消せば kenbun は履歴を失う。だから kenbun はそういう主張をしない）。
 
-### この deploy が塞ぐもの（明記）
+### ⚠ D1 backend は暫定であり、恒久の設計ではない
+
+**本来の backend は kotobase.net**（この workspace の graph BaaS）である。
+`kotoba-lang/kotobase-client` は **ClojureScript** なので **Worker で動き**、
+`q` / `datoms` / `pull` / `transact` / `fold` を持ち、サービスは live。
+上の hydrate → 同期 handler → 差分 commit の橋は backend を差し替えるだけで
+そのまま効くので、**「`IssueStore` が同期だから無理」は理由になっていなかった**
+（2026-08-17、オーナー指摘で判明。私は埋め込みエンジン `kotobase.core` だけを見て
+hosted BaaS を検討していなかった）。
+
+kotobase.net に載せれば、下の「塞がるもの」は**塞がらない**——
+`:apex` は graph scope == issuer DID を要求するので、**鍵の本数がそのまま Datalog で
+結合できる範囲になる**（艦隊 1,197 actor が seed 1 本を共有しているのはこの理由）。
+
+**いま止まっているのは能力ではなく鍵の所在**: `itonami-fleet-kotobase-seed` は
+kagi に存在せず（`no such item`、2026-08-17 実測）、投入先は読み戻せない Worker
+secret。**新しい seed は発行しない**——新 seed = 新 DID = 新 graph であり、
+それはオーナーが 2026-07-30 に明示的に退けた分割そのものだから。
+
+### 現状の D1 backend が塞いでいるもの（暫定の代償）
 
 **この行は共有 kotobase datom 面に無い。** `repo-taxonomy` / `repo-maturity` と
 repo path で join する query——「どの repo が確定欠陥を最も抱えているか」——は
-**この deployment に対しては書けない**。JVM 側の `kenbun.store.kotobase` が在るのは
-そのためで、こちらでは使えない（`kotobase.core` が cljs で Promise を返す）。
+**この deployment に対しては書けない**。
 
 ### 認証
 
