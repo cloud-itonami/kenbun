@@ -22,7 +22,11 @@
       { "name": "KENBUN_STORE", "class_name": "KenbunStore" }
     ]
   },
+  // new_sqlite_classes, not new_classes: this account no longer accepts
+  // key-value backed Durable Object namespaces (API error 10099). The object
+  // holds no state of its own either way — it exists to serialize, and the
+  // rows live in D1.
   "migrations": [
-    { "tag": "v1", "new_classes": ["KenbunStore"] }
+    { "tag": "v1", "new_sqlite_classes": ["KenbunStore"] }
   ]
 }

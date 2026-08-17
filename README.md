@@ -200,6 +200,81 @@ entity を残さないので、store に在るものを「提出された全部�
 数えるのは admission gate が拒んでいる collapse そのもの。答えるのは
 `intake/intake-report`（結果の集合が要る）の仕事。
 
+## Deploy（live）
+
+**https://kenbun.04-feasts-minded.workers.dev** — Cloudflare Worker、Durable Object
+1 個を直列化器、D1 を storage に使う。ビルドは `worker/`。
+
+```bash
+cd worker
+node ../../../../scripts/resource-guard.mjs run build -- npx shadow-cljs release worker
+npx wrangler deploy
+```
+
+| 部品 | 役割 |
+|---|---|
+| `kenbun.worker` | socket・認証・store 注入。`kenbun.http/handle` は無改造 |
+| `kenbun.worker.d1-store` | hydrate → 同期 handler → 差分 commit（1 batch = 1 transaction） |
+| DO `KenbunStore`（1 instance） | **直列化器**。read も通す |
+| D1 `kenbun` | 行の置き場（**共有バックエンド**。DO の中には置かない） |
+
+### なぜ DO + D1 なのか
+
+read-modify-write は 2 リクエストが交差すると**黙って**更新を落とす（両方 201 を返し、
+片方の finding が消える）。DO は globally unique・single-threaded なので
+「書き手はちょうど 1 人」を write lease も fencing epoch も**書かずに**得られる。
+storage を DO の中ではなく D1 に置くのは workspace 規則（DO は直列化器、
+ストレージは共有バックエンド）。
+
+**R2 が第一候補だったが使えない** — この account の OAuth token に **`r2` scope が無い**
+（ADR-2607299900 が踏んだのと同じ blocker、2026-08-17 に `wrangler whoami` で再実測）。
+D1 は**アプリの DB** として使っており、分散を名乗る経路の premise ではない
+（消せば kenbun は履歴を失う。だから kenbun はそういう主張をしない）。
+
+### この deploy が塞ぐもの（明記）
+
+**この行は共有 kotobase datom 面に無い。** `repo-taxonomy` / `repo-maturity` と
+repo path で join する query——「どの repo が確定欠陥を最も抱えているか」——は
+**この deployment に対しては書けない**。JVM 側の `kenbun.store.kotobase` が在るのは
+そのためで、こちらでは使えない（`kotobase.core` が cljs で Promise を返す）。
+
+### 認証
+
+`Authorization: Bearer <token>` を `PRINCIPALS` secret（token → principal の EDN map）で
+引く。principal はここ（shell）で解決し、**クライアントが設定できないヘッダ**として
+DO へ渡す（DO は公開アドレスを持たない）。secret が壊れていれば nil を返す——
+誤設定は「誰も書けない」に落ちるべきで、「誰でも書ける」に落ちてはいけない。
+
+**共有 secret 表はこれが持てる最弱の identity である。** 入力 1 つの関数 1 本にして
+あるので、CACAO 検証で置き換えるときに他へ波及しない。
+
+### routes を宣言していない
+
+custom domain は**単一所有**で、最後に deploy した側が勝ち、**どちらにも conflict が
+出ない**（`kotobase-protocols-worker` は 2026-07-17 にこれで `git.kotobase.net` を
+失った）。だから v0.1 は workers.dev だけに出し、ホスト名は**副作用ではなく明示的に**
+取りにいく。
+
+### live 実測（2026-08-17）
+
+```
+/health                        principals-configured / bindings-present を申告
+POST 未認証                    401 no-authenticated-principal
+POST human, 良い evidence      201 filed
+POST agent, 同じ欠陥・別の言葉  200 corroborated（reproduced-by #{"agent-7"}、issue は 1 本のまま）
+POST 再現手順なし               422 no-repro-steps
+POST 未知 severity              409 unknown-severity（422 とは別 status）
+POST body が :reporter を名乗る 400 reporter-not-accepted-in-body（何も filed されない）
+POST body が :reproduced-by     400 reproduced-by-not-accepted-in-body
+POST review :approve            200 → :merged → confirmed
+```
+
+D1 を直接引いた結果（API 越しではなく DB で確認）: `finding 1 / issue 1 / proposal 1 /
+review 1`、audit は順序どおり 5 件
+（`issue:opened → propose → corroborated → review:approved → merge:merged`）。
+**reject / undecidable は 1 行も残していない**——それが `GET /report` が submission 総数を
+報告しない理由でもある。
+
 ## テスト
 
 ```bash
@@ -225,12 +300,16 @@ body が報告者を名乗れるようにすると 3 failure。
 
 ## まだ無いもの
 
-- **appview / HTTP 面。** いまは決定ランタイム + store adapter だけ。deploy 面を
-  足すときは `kotobase-protocol-issues` の `/issues/*`（`git.kotobase.net`）に載せる。
-- **Worker（cljs）経路。** `kotobase.core` は ClojureScript では **Promise を返す**が
-  `IssueStore` は同期 protocol なので、この adapter は **JVM 専用**である。
-  Worker deployment には非同期の issue-store 契約が要り、それはここにも上流にも
+- **custom domain。** live なのは workers.dev だけ。`kenbun.itonami.cloud` は
+  未取得（上記のとおり意図的に、副作用で取らない）。
+- **Worker が datom 面に載っていない。** `kotobase.core` は cljs で **Promise を返す**が
+  `IssueStore` は同期 protocol なので、`kenbun.store.kotobase` は **JVM 専用**のまま。
+  Worker を datom 面へ移すには非同期の issue-store 契約が要り、それはここにも上流にも
   無い。**実在する gap であって見落としではない。**
+- **hydrate が毎リクエスト全件を読む。** dedupe が「on file のどれかと同じ欠陥か」を
+  問うので v0.1 では全件。表が育てば通用しなくなる——隠れた TODO ではなく
+  `d1-store` の docstring と ここに書いてある。
+- **認証が共有 secret 表。** 持てる最弱の identity。CACAO 検証への差し替えが次。
 - **durable provider の実測。** adapter は provider 非依存だが、検証は
   `storage.memory` に対してのみ行った。sqlite / s3 / postgres provider での実測は
   していない——**していないものを「動く」と書かない。**
