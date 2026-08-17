@@ -331,9 +331,16 @@ body が報告者を名乗れるようにすると 3 failure。
   ⚠ この項目は 2026-08-17 まで「非同期契約が上流に無いので実在する gap」と
   書いていた。**それは誤りで、同じ README の deploy 節が既に訂正していたのに
   ここだけ古い論拠が残っていた**——訂正は文書の全箇所に当てる。
-- **hydrate が毎リクエスト全件を読む。** dedupe が「on file のどれかと同じ欠陥か」を
-  問うので v0.1 では全件。表が育てば通用しなくなる——隠れた TODO ではなく
-  `d1-store` の docstring と ここに書いてある。
+- **hydrate が毎リクエスト全件を読む（上限は可視化・強制済み）。** dedupe が
+  「on file のどれかと同じ欠陥か」を問うので v0.1 では全件。**正しい直し方は
+  fingerprint で候補を絞ることで、それは backend が確定してから**（今 D1 側に索引を
+  作ると捨てる作業になる）。
+  それまでの間、**上限が黙って越えられないようにした**（2026-08-17）:
+  `/health` が `:kenbun/hydrate-ceiling` を publish し、越えたリクエストは
+  `:store-failure` ではなく **`:hydrate-ceiling-exceeded` を実数付きで返して 503**。
+  `HYDRATE_CEILING` env で上書きでき、**live で 0 に落として実際に発火することを確認した**
+  （`{:entities 4 :ceiling 0}`）——一度も発火したことのない上限は、効くかどうか
+  誰も知らない上限である。
 - **認証が共有 secret 表。** 持てる最弱の identity。CACAO 検証への差し替えが次。
 - ~~durable provider の実測~~ **完了**（2026-08-17、`kotobase-storage-sqlite`）。
   **実バグを 1 件見つけた**: `append-audit!` の連番が record 内の atom だったので、

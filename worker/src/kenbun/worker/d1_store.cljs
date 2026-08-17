@@ -34,16 +34,21 @@
   These rows are NOT in the shared kotobase datom plane. A query joining
   kenbun findings to `repo-taxonomy` or `repo-maturity` on repo path — 'which
   repositories carry the most confirmed defects' — cannot be written against
-  this deployment. That is a real loss and the reason the JVM-side
-  `kenbun.store.kotobase` exists; it cannot be used here because
-  `kotobase.core` returns Promises on ClojureScript. Moving the Worker onto
-  the datom plane needs an async IssueStore contract, which does not exist
-  upstream.
+  this deployment.
+
+  That is a consequence of THIS backend, not a property of Workers. An
+  earlier version of this paragraph said moving to the datom plane needed an
+  async IssueStore contract that did not exist upstream; that was wrong and
+  is retracted. `kotoba-lang/kotobase-client` is ClojureScript, kotobase.net
+  is live, and the hydrate/commit bridge above is backend-agnostic — what
+  blocks the move is key custody (itonami-fleet-kotobase-seed), not any
+  missing contract. D1 is therefore provisional.
 
   D1 is used as an app database, not as a premise for anything claiming to be
   distributed: delete it and kenbun loses its issue history, which is exactly
   why kenbun is not on a path that makes decentralisation claims."
   (:require [clojure.edn :as edn]
+            [goog.object]
             [kotoba.issue.store :as store]))
 
 (def schema
@@ -66,16 +71,49 @@
 (defn- rows [^js result]
   (js->clj (.-results result) :keywordize-keys true))
 
-(defn hydrate!
-  "Load every entity into a fresh `mem-store`.
+(def hydrate-ceiling
+  "The most entities a request will load before refusing to serve.
 
-  Loading everything rather than only the rows a request might touch is a
-  deliberate v0.1 choice: dedupe asks 'is any finding on file the same defect
-  as this one', which is a question about all of them. It is bounded by the
-  table size and will stop being acceptable — the ceiling is written here
-  rather than hidden in a TODO so it is visible before it is hit."
-  [^js db]
-  (-> (.all (.prepare db "SELECT kind, id, body FROM entity"))
+  `hydrate!` loads everything, because dedupe asks 'is any finding on file the
+  same defect as this one', which is a question about all of them. That is a
+  v0.1 choice with a real limit, and the limit is enforced rather than
+  described: past this count a request REFUSES, naming the number, instead of
+  loading anyway and failing somewhere inside the Worker's CPU budget with an
+  error about something else.
+
+  A service that quietly degrades past its own ceiling is the same failure
+  this repository exists to catch — a limit nobody can see reached is a limit
+  discovered by its consequences. Raising this number is not the fix; loading
+  candidates by fingerprint is, and that waits on which backend stays."
+  5000)
+
+(defn ceiling-for
+  "The effective ceiling. `HYDRATE_CEILING` overrides the default so the limit
+  can be exercised on a live deployment — a bound that has never been seen to
+  trigger is a bound nobody knows works."
+  [env]
+  (let [v (goog.object/get env "HYDRATE_CEILING")]
+    (if (and v (re-matches #"\d+" (str v))) (js/parseInt v 10) hydrate-ceiling)))
+
+(defn entity-count [^js db]
+  (-> (.first (.prepare db "SELECT count(*) AS n FROM entity"))
+      (.then (fn [row] (if row (.-n row) 0)))))
+
+(defn hydrate!
+  "Load every entity into a fresh `mem-store`, or reject if there are more
+  than the effective ceiling.
+
+  The rejection is a thrown error carrying the count, so the caller reports
+  the real reason rather than a generic store failure."
+  [^js db ceiling]
+  (-> (entity-count db)
+      (.then (fn [n]
+               (when (> n ceiling)
+                 (throw (ex-info "hydrate ceiling exceeded"
+                                 {:kenbun.error/reason :hydrate-ceiling-exceeded
+                                  :entities n
+                                  :ceiling ceiling})))
+               (.all (.prepare db "SELECT kind, id, body FROM entity"))))
       (.then (fn [result]
                (let [s (store/mem-store)]
                  (doseq [{:keys [kind id body]} (rows result)]
@@ -116,8 +154,8 @@
 (defn with-store
   "hydrate -> f(store) -> commit. `f` is synchronous and pure apart from the
   store it is handed. Returns a promise of `[result commit-stats]`."
-  [^js db f]
-  (-> (hydrate! db)
+  [^js db ceiling f]
+  (-> (hydrate! db ceiling)
       (.then (fn [s]
                (let [before (entity-snapshot s)
                      audit-before (vec (store/audit-log s))

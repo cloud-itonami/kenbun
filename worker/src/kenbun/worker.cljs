@@ -103,17 +103,28 @@
                       :body (when-not (= "" body) body)}]
              (-> (d1/ensure-schema! db)
                  (.then (fn [_]
-                          (d1/with-store db (fn [store]
-                                              (http/handle {:store store :principal principal}
-                                                           req)))))
+                          (d1/with-store db (d1/ceiling-for env)
+                                         (fn [store]
+                                           (http/handle {:store store :principal principal}
+                                                        req)))))
                  (.then (fn [pair] (->response (aget pair 0))))))))
         (.catch (fn [e]
                   ;; The message is kept. A generic 500 would make a schema
                   ;; problem and a bug in the handler look identical, and 503
                   ;; says the store failed rather than that the request was
                   ;; wrong.
-                  (edn-response 503 {:kenbun.error/reason :store-failure
-                                     :kenbun.error/detail {:message (str (.-message e))}}))))))
+                  ;;
+                  ;; The hydrate ceiling gets its own reason and its own
+                  ;; numbers. Folding it into :store-failure would make
+                  ;; "this deployment has outgrown its v0.1 read strategy"
+                  ;; look like "the database is broken", and those need
+                  ;; different responses from whoever is paged.
+                  (let [d (ex-data e)]
+                    (if (= :hydrate-ceiling-exceeded (:kenbun.error/reason d))
+                      (edn-response 503 {:kenbun.error/reason :hydrate-ceiling-exceeded
+                                         :kenbun.error/detail (select-keys d [:entities :ceiling])})
+                      (edn-response 503 {:kenbun.error/reason :store-failure
+                                         :kenbun.error/detail {:message (str (.-message e))}}))))))))
 
 (deftype KenbunStore [ctx env]
   Object
@@ -135,7 +146,11 @@
                                     (catch :default _ nil))))
                  :kenbun/bindings-present
                  (vec (remove nil? [(when (binding-of env "DB") "DB")
-                                    (when (binding-of env "KENBUN_STORE") "KENBUN_STORE")]))}))
+                                    (when (binding-of env "KENBUN_STORE") "KENBUN_STORE")]))
+                 ;; The ceiling is published so it can be watched approaching.
+                 ;; A limit whose only symptom is the failure it causes is a
+                 ;; limit discovered by its consequences.
+                 :kenbun/hydrate-ceiling (d1/ceiling-for env)}))
 
 (defn fetch-handler [^js request env _ctx]
   (let [url (js/URL. (.-url request))
