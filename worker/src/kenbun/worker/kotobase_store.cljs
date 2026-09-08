@@ -43,7 +43,7 @@
   front is what makes the next request see it, because that request hydrates
   after this one's transact has been acknowledged."
   (:require [clojure.edn :as edn]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kotobase.client :as client]
             [kotoba.issue.store :as store]))
 

@@ -20,7 +20,7 @@
 
     npm run probe"
   (:require ["@noble/curves/ed25519.js" :refer [ed25519]]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kotobase.client :as client]))
 
 (def endpoint "https://kotobase.net")

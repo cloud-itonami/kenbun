@@ -15,7 +15,7 @@
 
     npm run e2e"
   (:require ["@noble/curves/ed25519.js" :refer [ed25519]]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kenbun.intake :as intake]
             [kenbun.worker.kotobase-store :as kbs]
             [kotobase.client :as client]
