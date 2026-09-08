@@ -33,7 +33,7 @@
   currently has `store/mem-store` and nothing durable. The handler is not
   what blocks that."
   (:require [clojure.edn :as edn]
-            [clojure.string :as str]
+            [kotoba.lang.text :as str]
             [kenbun.finding :as finding]
             [kenbun.intake :as intake]
             [kenbun.triage :as triage]

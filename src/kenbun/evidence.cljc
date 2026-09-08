@@ -20,7 +20,7 @@
   human's confident prose are both prose; what is checked is whether an
   expected/observed pair and reproduction steps are actually present, and
   whether the offered evidence contradicts the severity being claimed."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [kenbun.finding :as finding]))
 
 (def ^:private hedges
@@ -45,7 +45,7 @@
   whitespace. Punctuation and digits are NOT normalized away: 'returns 404'
   and 'returns 500' must stay different."
   [a b]
-  (letfn [(norm [x] (str/lower-case (str/join " " (remove str/blank? (str/split (str x) #"\s+")))))]
+  (letfn [(norm [x] (str/lower (str/join " " (remove str/blank? (str/split (str x) #"\s+")))))]
     (= (norm a) (norm b))))
 
 (defn- undecidable [reason detail]

@@ -11,7 +11,7 @@
   bar. It changes only what is *kept*: an agent's finding also records the
   model and the prompt it came from, so a later audit can ask which model
   produced which unreproducible claims."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (def reporter-kinds
   "Who can file. Both go through the identical admission gate."
