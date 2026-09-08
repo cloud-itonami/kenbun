@@ -11,7 +11,7 @@
   findings, which matters more here than a compact key: merging two real
   defects makes one of them disappear silently, and this repository exists to
   stop things disappearing silently."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- norm
   "Lowercase and collapse whitespace. Digits and punctuation are preserved:
@@ -19,7 +19,7 @@
   [x]
   (if (nil? x)
     ""
-    (str/lower-case (str/join " " (remove str/blank? (str/split (str x) #"\s+"))))))
+    (str/lower (str/join " " (remove str/blank? (str/split (str x) #"\s+"))))))
 
 (defn key-of
   "The exact dedupe key. Fields are joined with a separator that cannot occur
