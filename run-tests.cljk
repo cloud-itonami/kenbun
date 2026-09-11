@@ -1,9 +1,9 @@
-#!/usr/bin/env nbb
+#!/usr/bin/env kbb
 ;; The suite on nbb — the same three `.cljc` namespaces the JVM runs, on the
 ;; other runtime, so a ClojureScript-half defect in `kenbun.*` cannot hide
 ;; behind a green JVM gate (ADR-2608190100).
 ;;
-;;   nbb --classpath "src:test:$(clojure -Spath -M:test)" run-tests.cljk
+;;   kbb --backend sci --classpath "src:test:$(kbb -Spath -M:test)" run-tests.cljk
 ;;
 ;; The classpath needs the git dep (kotoba-issue); nbb does not read
 ;; deps.edn. On the fleet that is what `:ship-git-deps true` supplies.
