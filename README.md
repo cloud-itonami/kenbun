@@ -208,7 +208,7 @@ Worker、Durable Object 1 個を直列化器、D1 を storage に使う。ビル
 
 ```bash
 cd worker
-node ../../../../scripts/resource-guard.mjs run build -- npx shadow-cljs release worker
+node ../../../../scripts/resource-guard.mjs run build -- amu compile --target wasm32-browser worker
 npx wrangler deploy
 ```
 
@@ -314,10 +314,10 @@ review 1`、audit は順序どおり 5 件
 ## テスト
 
 ```bash
-clojure -M:dev:test                            # base + HTTP（38 tests / 129 assertions）
-clojure -M:dev:kotobase:test:kotobase-test     # + 永続 store（48 tests / 167 assertions）
-clojure -M:test                                # standalone fork（:git/sha で解決）
-clojure -M:lint                                # 4 つの source root すべて
+kbb -M:dev:test                            # base + HTTP（38 tests / 129 assertions）
+kbb -M:dev:kotobase:test:kotobase-test     # + 永続 store（48 tests / 167 assertions）
+kbb -M:test                                # standalone fork（:git/sha で解決）
+kbb -M:lint                                # 4 つの source root すべて
 ```
 
 **すべての検査は両方向を出す**——拒否する入力と受理する入力の両方を持つ
@@ -365,7 +365,7 @@ body が報告者を名乗れるようにすると 3 failure。
   同じ DB を開き直すと **0 から振り直し**、2 個目の session の記録が 1 個目と衝突して
   audit の順序が壊れていた。**memory provider では原理的に出ない**（開き直しが無い）。
   連番は既存の最大値から seed するよう修正。`:kotobase-sqlite` alias で
-  `clojure -M:dev:kotobase:kotobase-sqlite:test:kotobase-test` → 53 tests / 187 assertions。
+  `kbb -M:dev:kotobase:kotobase-sqlite:test:kotobase-test` → 53 tests / 187 assertions。
   s3 / postgres provider では引き続き測っていない。
 - **credit の決済面。** 意図的に無い（上記）。
 - ~~fleet gate 登録~~ **完了**（2026-08-17）。`gates.edn` に
