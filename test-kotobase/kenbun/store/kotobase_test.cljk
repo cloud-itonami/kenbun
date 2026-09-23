@@ -3,7 +3,7 @@
   `mem-store`. So the same intake scenarios run against both, and the three
   measured hazards of the datom plane each get a test that fails without the
   corresponding defence."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kenbun.intake :as intake]
             [kenbun.store.kotobase :as kbstore]
             [kotobase.core :as kb]

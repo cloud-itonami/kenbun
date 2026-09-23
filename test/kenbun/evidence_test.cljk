@@ -3,7 +3,7 @@
   input it admits. A check that has only ever been seen refusing is not known
   to accept anything, and one that has only ever been seen accepting is not
   known to refuse — either way nobody can act on its output."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kenbun.evidence :as evidence]
             [kenbun.finding :as finding]))
 

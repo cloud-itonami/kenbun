@@ -12,7 +12,7 @@
   and admitted the claim had only ever been measured against memory. This is
   the measurement."
   (:require [clojure.java.io :as io]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [kenbun.intake :as intake]
             [kenbun.store.kotobase :as kbstore]
             [kotobase.core :as kb]
