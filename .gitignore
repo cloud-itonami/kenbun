@@ -3,3 +3,4 @@ worker/out/
 worker/node_modules/
 worker/.shadow-cljs/
 .cpcache/
+.nbb/
