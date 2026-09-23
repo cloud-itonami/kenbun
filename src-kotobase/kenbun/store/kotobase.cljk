@@ -65,7 +65,7 @@
   earlier version of this docstring claimed a Worker needed an async
   IssueStore contract that did not exist. That was wrong, and is retracted:
   what actually blocks the move is key custody, not any missing contract."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [kotobase.core :as kb]
             [kotoba.issue.store :as store]))
 
