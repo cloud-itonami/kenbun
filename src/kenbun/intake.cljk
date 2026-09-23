@@ -15,7 +15,7 @@
   `submit!` never throws for a bad submission. A malformed finding is a
   result, not an exception — an intake that crashes on the input it exists to
   screen loses the input."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [kenbun.credit :as credit]
             [kenbun.dedupe :as dedupe]
             [kenbun.evidence :as evidence]

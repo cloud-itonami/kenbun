@@ -47,7 +47,7 @@
   D1 is used as an app database, not as a premise for anything claiming to be
   distributed: delete it and kenbun loses its issue history, which is exactly
   why kenbun is not on a path that makes decentralisation claims."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [goog.object]
             [kotoba.issue.store :as store]))
 

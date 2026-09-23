@@ -1,5 +1,5 @@
 (ns kenbun.http-test
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [kotoba.test :refer [deftest is testing]]
             [kenbun.http :as http]
             [kotoba.issue.store :as store]))

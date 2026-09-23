@@ -42,7 +42,7 @@
   giving a Worker that finds no bindings and no principals and reports
   nothing wrong until a request arrives. Binding lookups therefore go through
   `goog.object/get` with a string, and every external object is `^js` tagged."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [goog.object :as gobj]
             [kenbun.http :as http]
             [kenbun.worker.d1-store :as d1]

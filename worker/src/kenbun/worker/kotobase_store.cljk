@@ -42,7 +42,7 @@
   does NOT wait for its own write to become visible: the Durable Object in
   front is what makes the next request see it, because that request hydrates
   after this one's transact has been acknowledged."
-  (:require [clojure.edn :as edn]
+  (:require [kotoba.lang.edn :as edn]
             [kotoba.lang.text :as str]
             [kotobase.client :as client]
             [kotoba.issue.store :as store]))
