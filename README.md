@@ -3,7 +3,7 @@
 **kenbun（検分）は、人間と AI が提出した bug の申告を「これは欠陥報告か、
 それとも主張にすぎないか」で選別する決定ランタイムである。** 検分とは
 「現場へ行って自分の目で確かめ、確かめた内容を記録に残す」こと。名前が機能を
-示さないので最初に名乗る（superproject `CLAUDE.md` の規約: メタファ名の repo は
+示さないので最初に名乗る（superproject `AGENTS.md` の規約: メタファ名の repo は
 README 冒頭で名乗る）。ADR-2608170100。
 
 `cloud-itonami/kenbun` は west project で、`orgs/cloud-itonami/kenbun` に展開される。
@@ -17,7 +17,7 @@ bugspot / Linear / Jira は **申告されたものを受け取って並べる**
 - 人間も報奨がかかれば同じことをする。
 
 このとき tracker に溜まるのは欠陥ではなく**未検証の主張**であり、しかも
-検証済みの欠陥と**同じ顔**をしている。これは superproject `CLAUDE.md` の
+検証済みの欠陥と**同じ顔**をしている。これは superproject `AGENTS.md` の
 「測れなかった検査が、測って問題が無かった検査と同じ値を返す」——沈黙が緑として
 蓄積する——のちょうど裏返しで、**未再現の申告が bug として蓄積する**。
 
